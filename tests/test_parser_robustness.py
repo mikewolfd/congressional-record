@@ -200,3 +200,25 @@ class testShortBody(unittest.TestCase):
 
     def test_is_a_value_error(self):
         self.assertTrue(issubclass(cr.CRParseError, ValueError))
+
+
+class testAccessIdIndex(unittest.TestCase):
+    """A granule's MODS record is looked up in an index built once per MODS."""
+
+    def setUp(self):
+        self.crdir = day()
+
+    def test_index_holds_the_tag_find_returns(self):
+        tags = self.crdir.mods.find_all("accessid")
+        ids = {t.string for t in tags} - {None}
+        self.assertEqual(set(self.crdir.access_ids), ids)
+        for tag in (tags[0], tags[1], tags[len(tags) // 2], tags[-1]):
+            with self.subTest(access_id=tag.string):
+                self.assertIs(
+                    self.crdir.access_ids[tag.string],
+                    self.crdir.mods.find("accessid", string=tag.string),
+                )
+
+    def test_granule_absent_from_the_mods(self):
+        with self.assertRaisesRegex(RuntimeError, "doesn't have accessid tag"):
+            cr.ParseCRFile(granule("CREC-2005-07-20-pt1-Pgnull-2"), self.crdir)

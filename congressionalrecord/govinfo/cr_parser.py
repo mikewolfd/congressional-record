@@ -22,6 +22,12 @@ class ParseCRDir(object):
         from the mods file."""
         with open(self.mods_path, "r") as mods_file:
             self.mods = BeautifulSoup(mods_file, "lxml")
+        # Each accessId's first tag, as find("accessid", string=...) returns
+        # it, so looking up a granule reads a dict instead of walking the MODS.
+        self.access_ids = {}
+        for tag in self.mods.find_all("accessid"):
+            if tag.string is not None:
+                self.access_ids.setdefault(str(tag.string), tag)
 
     def __init__(self, abspath, **kwargs):
         # dir data
@@ -231,7 +237,7 @@ class ParseCRFile(object):
     # Flow control for metadata generation
     def gen_file_metadata(self):
         # Sometimes the searchtitle has semicolons in it so .split(';') is a nogo
-        temp_ref = self.cr_dir.mods.find("accessid", string=self.access_path)
+        temp_ref = self.cr_dir.access_ids.get(self.access_path)
         if temp_ref is None:
             raise RuntimeError("{} doesn't have accessid tag".format(self.access_path))
         self.doc_ref = temp_ref.parent
