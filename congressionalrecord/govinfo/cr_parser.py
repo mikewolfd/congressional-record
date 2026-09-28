@@ -376,6 +376,8 @@ class ParseCRFile(object):
         itemno = 0
         title = self.get_title()
         the_content = []
+        self.crdoc["parse_status"] = "complete"
+        self.crdoc.pop("parse_error", None)
         if title:
             self.crdoc["title"] = title
         else:
@@ -391,6 +393,12 @@ class ParseCRFile(object):
                 itemno += 1
                 the_content.append(item)
             except Exception as e:
+                self.crdoc["parse_status"] = "partial"
+                self.crdoc["parse_error"] = {
+                    "type": type(e).__name__,
+                    "message": str(e),
+                    "line": self.cur_line,
+                }
                 logging.warning("{0}".format(e))
                 break
 
