@@ -153,14 +153,10 @@ class testAbsentValues(unittest.TestCase):
                 CongressionalRecordDocument(**doc)
 
 
-class testShortBody(unittest.TestCase):
-    """A text that stops or strays inside its header raises CRParseError."""
+class RewrittenGranule(unittest.TestCase):
+    """A fixture granule whose <pre> lines a test rewrites and parses."""
 
     SOURCE = granule("CREC-2005-07-20-pt1-PgH6115-2")
-    ID = "CREC-2005-07-20-pt1-PgH6115-2"
-    # The <pre> text starts with a blank line, then the volume, chamber,
-    # pages and source lines.
-    PARTS = ["volume", "volume", "chamber", "pages", "source"]
 
     def setUp(self):
         self.crdir = day()
@@ -176,6 +172,15 @@ class testShortBody(unittest.TestCase):
         with open(self.path, "w") as body:
             body.write(self.head + "\n".join(lines) + "</pre></body></html>")
         return cr.ParseCRFile(self.path, self.crdir)
+
+
+class testShortBody(RewrittenGranule):
+    """A text that stops or strays inside its header raises CRParseError."""
+
+    ID = "CREC-2005-07-20-pt1-PgH6115-2"
+    # The <pre> text starts with a blank line, then the volume, chamber,
+    # pages and source lines.
+    PARTS = ["volume", "volume", "chamber", "pages", "source"]
 
     def test_truncated_inside_the_header(self):
         for kept, part in enumerate(self.PARTS):
@@ -200,6 +205,40 @@ class testShortBody(unittest.TestCase):
 
     def test_is_a_value_error(self):
         self.assertTrue(issubclass(cr.CRParseError, ValueError))
+
+
+class testMarkerLines(RewrittenGranule):
+    """A [[Page]] or {time} marker is not text; the rest of its line is."""
+
+    # Each alone on its line in the fixture.
+    MARKERS = {118: "[[Page H6116]]", 174: " " * 30 + "{time}  1100"}
+
+    def content(self, lines):
+        return self.parse(lines).crdoc["content"]
+
+    def test_marker_alone_on_its_line_is_dropped(self):
+        for index, marker in self.MARKERS.items():
+            with self.subTest(marker=marker):
+                self.assertEqual(self.lines[index], marker)
+                without = self.lines[:index] + self.lines[index + 1 :]
+                trailing = list(self.lines)
+                trailing[index] = marker + "  "
+                self.assertEqual(self.content(self.lines), self.content(without))
+                self.assertEqual(self.content(trailing), self.content(without))
+
+    def test_words_after_a_marker_are_kept(self):
+        # GovInfo's 1995 text sets some page markers at the start of a line
+        # of prose: "[[Page H2736]] flagrant case, the judge has the ...".
+        for index, marker in self.MARKERS.items():
+            with self.subTest(marker=marker):
+                words, marked = list(self.lines), list(self.lines)
+                words[index] = " the words after the marker"
+                marked[index] = marker + words[index]
+                content = self.content(marked)
+                self.assertEqual(content, self.content(words))
+                self.assertEqual(
+                    sum(words[index] in i["text"].split("\n") for i in content), 1
+                )
 
 
 class testAccessIdIndex(unittest.TestCase):
