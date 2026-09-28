@@ -236,7 +236,7 @@ class ParseCRFile(object):
     # Flow control for metadata generation
     def gen_file_metadata(self):
         # Sometimes the searchtitle has semicolons in it so .split(';') is a nogo
-        temp_ref = self.cr_dir.mods.find("accessid", text=self.access_path)
+        temp_ref = self.cr_dir.mods.find("accessid", string=self.access_path)
         if temp_ref is None:
             raise RuntimeError("{} doesn't have accessid tag".format(self.access_path))
         self.doc_ref = temp_ref.parent
