@@ -1,5 +1,6 @@
 import copy
 import os
+import tempfile
 import unittest
 import warnings
 from functools import lru_cache
@@ -150,3 +151,52 @@ class testAbsentValues(unittest.TestCase):
             with self.subTest(path=path):
                 doc = cr.ParseCRFile(path, self.crdir).crdoc
                 CongressionalRecordDocument(**doc)
+
+
+class testShortBody(unittest.TestCase):
+    """A text that stops or strays inside its header raises CRParseError."""
+
+    SOURCE = granule("CREC-2005-07-20-pt1-PgH6115-2")
+    ID = "CREC-2005-07-20-pt1-PgH6115-2"
+    # The <pre> text starts with a blank line, then the volume, chamber,
+    # pages and source lines.
+    PARTS = ["volume", "volume", "chamber", "pages", "source"]
+
+    def setUp(self):
+        self.crdir = day()
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.path = os.path.join(tmp.name, os.path.basename(self.SOURCE))
+        with open(self.SOURCE) as source:
+            html = source.read()
+        start = html.index("<pre>") + len("<pre>")
+        self.head, self.lines = html[:start], html[start:].split("\n")
+
+    def parse(self, lines):
+        with open(self.path, "w") as body:
+            body.write(self.head + "\n".join(lines) + "</pre></body></html>")
+        return cr.ParseCRFile(self.path, self.crdir)
+
+    def test_truncated_inside_the_header(self):
+        for kept, part in enumerate(self.PARTS):
+            with self.subTest(lines=kept):
+                with self.assertRaisesRegex(
+                    cr.CRParseError,
+                    "{0} ends before its header's {1} line".format(self.ID, part),
+                ):
+                    self.parse(self.lines[:kept])
+
+    def test_truncated_after_the_header(self):
+        doc = self.parse(self.lines[: len(self.PARTS)]).crdoc
+        self.assertEqual(doc["header"]["pages"], "H6115-H6117")
+        self.assertEqual(doc["content"], [])
+
+    def test_header_line_that_does_not_match(self):
+        lines = list(self.lines)
+        self.assertEqual(lines[2], "[House]")
+        lines[2] = "House"
+        with self.assertRaisesRegex(cr.CRParseError, "header's chamber line"):
+            self.parse(lines)
+
+    def test_is_a_value_error(self):
+        self.assertTrue(issubclass(cr.CRParseError, ValueError))

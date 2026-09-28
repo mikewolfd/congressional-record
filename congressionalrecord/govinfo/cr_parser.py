@@ -12,6 +12,10 @@ from bs4 import BeautifulSoup
 from congressionalrecord.govinfo.subclasses import crItem
 
 
+class CRParseError(ValueError):
+    """A granule's text is not laid out as the parser reads it."""
+
+
 class ParseCRDir(object):
     def gen_dir_metadata(self):
         """Load up all metadata for this directory
@@ -274,65 +278,55 @@ class ParseCRFile(object):
             yield line
         self.lines_remaining = False
 
-    def get_header(self):
+    def header_line(self, pattern, part, skip_blank=False):
         """
-        Only after I wrote this did I realize
-        how bad things can go when you call
-        next() on an iterator instead of treating
-        it as a list.
-
-        This code works, though.
+        Match the text's next line, or the one after a blank line if
+        skip_blank, against a header pattern. A text that ends first, or a
+        line that does not match, raises CRParseError naming the part.
         """
-        header_in = next(self.the_text)
-        if header_in == "":
-            header_in = next(self.the_text)
-        match = re.match(self.re_vol_file, header_in)
-        if match:
-            vol, num, wkday, month, day, year = match.group(
-                "vol", "num", "wkday", "month", "day", "year"
+        line = next(self.the_text, None)
+        if skip_blank and line == "":
+            line = next(self.the_text, None)
+        if line is None:
+            raise CRParseError(
+                "{0} ends before its header's {1} line".format(self.access_path, part)
             )
-        else:
-            return False
-        header_in = next(self.the_text)
-        match = re.match(self.re_chamber, header_in)
-        if match:
-            if match.group("chamber") == "Extensions of Remarks":
-                chamber = "House"
-                extensions = True
-            else:
-                chamber = match.group("chamber")
-                extensions = False
-        else:
-            return False
-        header_in = next(self.the_text)
-        match = re.match(self.re_pages, header_in)
-        if match:
-            pages = match.group("pages")
-        else:
-            return False
-        header_in = next(self.the_text)
-        match = re.match(self.re_trail, header_in)
-        if match:
-            pass
-        else:
-            return False
+        match = re.match(pattern, line)
+        if match is None:
+            raise CRParseError(
+                "{0}: the header's {1} line does not match: {2!r}".format(
+                    self.access_path, part, line
+                )
+            )
+        return match
+
+    def get_header(self):
+        """Volume, number, date, chamber and pages from the text's header lines."""
+        vol, num, wkday, month, day, year = self.header_line(
+            self.re_vol_file, "volume", skip_blank=True
+        ).group("vol", "num", "wkday", "month", "day", "year")
+        chamber = self.header_line(self.re_chamber, "chamber").group("chamber")
+        extensions = chamber == "Extensions of Remarks"
+        if extensions:
+            chamber = "House"
+        pages = self.header_line(self.re_pages, "pages").group("pages")
+        self.header_line(self.re_trail, "source")
         return vol, num, wkday, month, day, year, chamber, pages, extensions
 
     def write_header(self):
         self.crdoc["id"] = self.access_path
         header = self.get_header()
-        if header:
-            self.crdoc["header"] = {
-                "vol": header[0],
-                "num": header[1],
-                "wkday": header[2],
-                "month": header[3],
-                "day": header[4],
-                "year": header[5],
-                "chamber": header[6],
-                "pages": header[7],
-                "extension": header[8],
-            }
+        self.crdoc["header"] = {
+            "vol": header[0],
+            "num": header[1],
+            "wkday": header[2],
+            "month": header[3],
+            "day": header[4],
+            "year": header[5],
+            "chamber": header[6],
+            "pages": header[7],
+            "extension": header[8],
+        }
         self.crdoc["doc_title"] = self.doc_title
 
     def get_title(self):
