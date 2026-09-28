@@ -1,5 +1,6 @@
 from __future__ import absolute_import
 
+import copy
 import itertools
 import logging
 import os
@@ -516,6 +517,9 @@ class ParseCRFile(object):
         self.cr_dir = cr_dir
         self.access_path = self.filename.split(".")[0]
 
+        # gen_file_metadata writes this document's speaker pattern into the
+        # table, so each document gets its own copy of the class's.
+        self.item_types = copy.deepcopy(type(self).item_types)
         # Generate all metadata including list of speakers
         self.gen_file_metadata()
         # Must come after speaker list generation
