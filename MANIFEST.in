@@ -1,0 +1,2 @@
+# Fork only: the sdist carries the package, not the test suite or its data.
+prune tests
