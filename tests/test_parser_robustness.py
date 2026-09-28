@@ -3,7 +3,10 @@ import os
 import unittest
 import warnings
 from functools import lru_cache
+from importlib.util import find_spec
 from unittest.mock import patch
+
+from bs4 import BeautifulSoup
 
 from congressionalrecord.govinfo import cr_parser as cr
 
@@ -26,6 +29,17 @@ def speeches(parser):
         for item in parser.crdoc["content"]
         if item["kind"] == "speech"
     ]
+
+
+def none_strings(node, path=()):
+    """Where a parsed document holds the string "None"."""
+    if isinstance(node, dict):
+        children = node.items()
+    elif isinstance(node, list):
+        children = enumerate(node)
+    else:
+        return [path] if node == "None" else []
+    return [p for key, child in children for p in none_strings(child, path + (key,))]
 
 
 class testBeautifulSoupArguments(unittest.TestCase):
@@ -87,3 +101,52 @@ class testSpeakerPatternPerDocument(unittest.TestCase):
             interleaved = cr.ParseCRFile(self.DOC, self.crdir)
         self.assertIsNotNone(other[0])
         self.assertEqual(speeches(interleaved), alone)
+
+
+class testAbsentValues(unittest.TestCase):
+    """A value the source lacks is None, never the string "None"."""
+
+    # Its MODS search title lacks "; Congressional Record Vol. N, No. N".
+    UNTITLED = granule("CREC-2005-07-20-pt1-PgH6176-5")
+    TITLED = granule("CREC-2005-07-20-pt1-PgH6115-2")
+
+    def setUp(self):
+        self.crdir = day()
+
+    def test_member_without_attributes(self):
+        member = BeautifulSoup(
+            '<congmember><name type="parsed">Mr. DOE</name></congmember>', "lxml"
+        ).congmember
+        parser = cr.ParseCRFile.__new__(cr.ParseCRFile)
+        self.assertEqual(
+            parser.people_helper(member),
+            dict.fromkeys(
+                ["bioguideid", "chamber", "congress", "party", "state", "role"]
+                + ["name_full"]
+            ),
+        )
+
+    def test_untitled_document(self):
+        doc = cr.ParseCRFile(self.UNTITLED, self.crdir).crdoc
+        self.assertIsNone(doc["doc_title"])
+
+    def test_kinds_without_a_speaker(self):
+        content = cr.ParseCRFile(self.TITLED, self.crdir).crdoc["content"]
+        unspoken = {i["kind"] for i in content if i["speaker"] is None}
+        self.assertIn("linebreak", unspoken)
+        self.assertNotIn("speech", unspoken)
+
+    def test_no_value_is_the_string_none(self):
+        for path in (self.UNTITLED, self.TITLED):
+            with self.subTest(path=path):
+                doc = cr.ParseCRFile(path, self.crdir).crdoc
+                self.assertEqual(none_strings(doc), [])
+
+    @unittest.skipUnless(find_spec("pydantic"), "pydantic is not installed")
+    def test_documents_validate(self):
+        from congressionalrecord.schema import CongressionalRecordDocument
+
+        for path in (self.UNTITLED, self.TITLED):
+            with self.subTest(path=path):
+                doc = cr.ParseCRFile(path, self.crdir).crdoc
+                CongressionalRecordDocument(**doc)

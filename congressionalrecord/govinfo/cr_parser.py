@@ -135,24 +135,14 @@ class ParseCRFile(object):
         return re_speakers
 
     def people_helper(self, tagobject):
-        output_dict = {}
-        if "bioguideid" in tagobject.attrs:
-            output_dict["bioguideid"] = tagobject["bioguideid"]
-        elif "bioGuideId" in tagobject.attrs:
-            output_dict["bioguideid"] = tagobject["bioGuideId"]
-        else:
-            output_dict["bioguideid"] = "None"
+        """A member's MODS attributes and full name; None where the MODS has none."""
+        output_dict = {
+            "bioguideid": tagobject.get("bioguideid", tagobject.get("bioGuideId"))
+        }
         for key in ["chamber", "congress", "party", "state", "role"]:
-            if key in tagobject.attrs:
-                output_dict[key] = tagobject[key]
-            else:
-                output_dict[key] = "None"
-        try:
-            output_dict["name_full"] = tagobject.find(
-                "name", {"type": "authority-fnf"}
-            ).string
-        except:
-            output_dict["name_full"] = "None"
+            output_dict[key] = tagobject.get(key)
+        name = tagobject.find("name", {"type": "authority-fnf"})
+        output_dict["name_full"] = None if name is None else name.string
         return output_dict
 
     def find_people(self):
@@ -248,7 +238,7 @@ class ParseCRFile(object):
             )
         else:
             logging.warning("{0} yields no title, vol, num".format(self.access_path))
-            self.doc_title, self.cr_vol, self.cr_num = "None", "Unknown", "Unknown"
+            self.doc_title, self.cr_vol, self.cr_num = None, None, None
         self.find_people()
         self.find_related_bills()
         self.find_related_laws()
@@ -453,7 +443,7 @@ class ParseCRFile(object):
         "linebreak": {
             "patterns": [re_linebreak],
             "speaker_re": False,
-            "speaker": "None",
+            "speaker": None,
             "break_flow": True,
             "special_case": True,
             "condition": "emptystr",
@@ -461,7 +451,7 @@ class ParseCRFile(object):
         "excerpt": {
             "patterns": [re_excerpt],
             "speaker_re": False,
-            "speaker": "None",
+            "speaker": None,
             "break_flow": True,
             "special_case": True,
             "condition": "lastspeaker",
@@ -469,28 +459,28 @@ class ParseCRFile(object):
         "rollcall": {
             "patterns": [re_rollcall],
             "speaker_re": False,
-            "speaker": "None",
+            "speaker": None,
             "break_flow": True,
             "special_case": False,
         },
         "metacharacters": {
             "patterns": [re_timestamp, re_newpage],
             "speaker_re": False,
-            "speaker": "None",
+            "speaker": None,
             "break_flow": False,
             "special_case": False,
         },
         "empty_line": {
             "patterns": [r"(^[\s]+$)"],
             "speaker_re": False,
-            "speaker": "None",
+            "speaker": None,
             "break_flow": False,
             "special_case": False,
         },
         "title": {
             "patterns": [re_allcaps],
             "speaker_re": False,
-            "speaker": "None",
+            "speaker": None,
             "break_flow": True,
             "special_case": False,
         },
